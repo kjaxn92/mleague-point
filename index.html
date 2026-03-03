@@ -1,0 +1,342 @@
+import { useState, useRef, useCallback } from "react";
+
+const PRESETS = ["#c9a84c","#9f9f9f","#e05252","#4ecdc4","#5b8fd4","#c060e0","#5ec45e","#ffffff"];
+
+const Label = ({ children }) => (
+  <span style={{ fontSize: "0.59rem", letterSpacing: "1px", color: "rgba(255,255,255,0.32)" }}>
+    {children}
+  </span>
+);
+
+const SectionTitle = ({ children }) => (
+  <div style={{
+    fontSize: "0.55rem", letterSpacing: "4px", color: "#2a2a38", textTransform: "uppercase",
+    borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "5px", marginBottom: "8px"
+  }}>{children}</div>
+);
+
+const TextInput = ({ value, onChange, placeholder }) => (
+  <input
+    type="text"
+    value={value}
+    onChange={e => onChange(e.target.value)}
+    placeholder={placeholder}
+    style={{
+      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)",
+      color: "#fff", fontSize: "0.8rem", padding: "7px 9px", width: "100%", outline: "none",
+      fontFamily: "inherit", transition: "border 0.15s",
+    }}
+    onFocus={e => e.target.style.borderColor = "#c9a84c"}
+    onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+  />
+);
+
+const Toggle = ({ options, value, onChange }) => (
+  <div style={{
+    display: "flex", gap: "2px",
+    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.12)", padding: "2px"
+  }}>
+    {options.map(opt => (
+      <button key={opt.value} onClick={() => onChange(opt.value)} style={{
+        flex: 1, background: value === opt.value ? "#c9a84c" : "transparent",
+        border: "none", color: value === opt.value ? "#000" : "rgba(255,255,255,0.32)",
+        fontSize: "0.66rem", letterSpacing: "1px", padding: "5px 3px", cursor: "pointer",
+        transition: "all 0.15s", fontFamily: "inherit",
+      }}>{opt.label}</button>
+    ))}
+  </div>
+);
+
+// PNG出力用 - テロップをCanvasに描画
+function drawTelopToCanvas({ name, team, score, delta, dir, stripeColor, colMode }) {
+  const W = 460, H = 72;
+  const canvas = document.createElement("canvas");
+  canvas.width = W * 2; canvas.height = H * 2;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(2, 2);
+
+  // 背景（半透明黒）
+  ctx.fillStyle = "rgba(8,9,16,0.95)";
+  ctx.fillRect(4, 0, W - 4, H);
+  // 枠線
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(4.5, 0.5, W - 5, H - 1);
+  // ストライプ
+  ctx.fillStyle = stripeColor;
+  ctx.fillRect(0, 0, 4, H);
+
+  // フォント読み込み済み前提で描画
+  const n = parseFloat(score.replace(/[,，]/g, ""));
+  let ptsColor;
+  if (colMode === "auto") ptsColor = isNaN(n) ? "#fff" : n >= 30000 ? "#f0d080" : n >= 20000 ? "#fff" : "#e05252";
+  else if (colMode === "hi") ptsColor = "#f0d080";
+  else if (colMode === "lo") ptsColor = "#e05252";
+  else ptsColor = "#fff";
+
+  const deltaColor = dir === "up" ? "#4ecdc4" : dir === "down" ? "#e05252" : "rgba(255,255,255,0.35)";
+  const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "—";
+
+  // 選手名
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 16px 'Noto Sans JP', sans-serif";
+  ctx.fillText(name, 60, 30);
+  // チーム名
+  ctx.fillStyle = "rgba(255,255,255,0.3)";
+  ctx.font = "10px 'Noto Sans JP', sans-serif";
+  ctx.fillText(team, 60, 48);
+
+  // 増減
+  ctx.fillStyle = deltaColor;
+  ctx.font = "bold 11px 'Rajdhani', sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText(arrow + " " + delta, W - 16, 30);
+
+  // 点数
+  ctx.fillStyle = ptsColor;
+  ctx.font = "bold 28px 'Bebas Neue', sans-serif";
+  ctx.fillText(score, W - 50, 58);
+
+  // 「点」単位
+  ctx.fillStyle = "rgba(255,255,255,0.28)";
+  ctx.font = "10px 'Rajdhani', sans-serif";
+  ctx.fillText("点", W - 16, 60);
+
+  ctx.textAlign = "left";
+  return canvas;
+}
+
+export default function App() {
+  const [name, setName] = useState("松本 吉弘");
+  const [team, setTeam] = useState("KONAMI 麻雀格闘倶楽部");
+  const [score, setScore] = useState("38,200");
+  const [delta, setDelta] = useState("+12,000");
+  const [dir, setDir] = useState("up");
+  const [colMode, setColMode] = useState("auto");
+  const [stripeColor, setStripeColor] = useState("#c9a84c");
+  const [hexInput, setHexInput] = useState("#c9a84c");
+  const [bgMode, setBgMode] = useState("dark");
+  const [status, setStatus] = useState("");
+  const telopRef = useRef(null);
+
+  const ptsColor = useCallback(() => {
+    if (colMode === "auto") {
+      const n = parseFloat(score.replace(/[,，]/g, ""));
+      return isNaN(n) ? "#fff" : n >= 30000 ? "#f0d080" : n >= 20000 ? "#fff" : "#e05252";
+    }
+    return { hi: "#f0d080", lo: "#e05252", mi: "#fff" }[colMode] ?? "#fff";
+  }, [score, colMode]);
+
+  const deltaColor = dir === "up" ? "#4ecdc4" : dir === "down" ? "#e05252" : "rgba(255,255,255,0.35)";
+  const arrow = dir === "up" ? "▲" : dir === "down" ? "▼" : "—";
+
+  const handleColorPicker = (v) => { setStripeColor(v); setHexInput(v); };
+  const handleHexInput = (v) => {
+    setHexInput(v);
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) setStripeColor(v);
+  };
+
+  const downloadPNG = useCallback(async () => {
+    if (!telopRef.current) return;
+    setStatus("生成中...");
+    try {
+      const { default: html2canvas } = await import("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.esm.js").catch(() => ({ default: null }));
+      
+      // html2canvasが使えない場合はCanvas直接描画
+      const canvas = drawTelopToCanvas({ name, team, score, delta, dir, stripeColor, colMode });
+      const link = document.createElement("a");
+      link.download = `score_${name.replace(/\s/g, "_")}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      setStatus("✓ 完了");
+      setTimeout(() => setStatus(""), 3000);
+    } catch (e) {
+      setStatus("エラー");
+      console.error(e);
+    }
+  }, [name, team, score, delta, dir, stripeColor, colMode]);
+
+  const bgStyle = {
+    dark: { background: "repeating-linear-gradient(45deg,#0b0c14 0,#0b0c14 10px,#0c0d16 10px,#0c0d16 20px)" },
+    light: { background: "repeating-linear-gradient(45deg,#c6c6c6 0,#c6c6c6 10px,#cecece 10px,#cecece 20px)" },
+    green: { background: "#00b140" },
+  }[bgMode];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0a0b12", color: "#fff", fontFamily: "'Noto Sans JP', sans-serif" }}>
+      {/* ヘッダー */}
+      <header style={{
+        display: "flex", alignItems: "center", gap: "12px",
+        padding: "11px 22px", background: "rgba(7,8,15,0.96)",
+        borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0,
+      }}>
+        <span style={{ fontFamily: "'Bebas Neue', cursive", fontSize: "0.95rem", letterSpacing: "5px", color: "#c9a84c" }}>MLEAGUE</span>
+        <span style={{ fontSize: "0.58rem", letterSpacing: "3px", color: "#2c2c3a" }}>点数テロップ</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={downloadPNG} style={{
+          display: "flex", alignItems: "center", gap: "7px",
+          background: "#c9a84c", color: "#000", border: "none",
+          fontFamily: "'Bebas Neue', cursive", fontSize: "0.78rem", letterSpacing: "3px",
+          padding: "8px 20px", cursor: "pointer",
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M12 3v13M7 11l5 5 5-5M3 20h18" />
+          </svg>
+          PNG 出力
+        </button>
+      </header>
+
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* サイドエディタ */}
+        <aside style={{
+          width: "286px", flexShrink: 0,
+          background: "#0f1016", borderRight: "1px solid rgba(255,255,255,0.07)",
+          padding: "20px 14px", display: "flex", flexDirection: "column", gap: "20px",
+          overflowY: "auto",
+        }}>
+          {/* 選手情報 */}
+          <div>
+            <SectionTitle>選手情報</SectionTitle>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <Label>選手名</Label>
+                <TextInput value={name} onChange={setName} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <Label>チーム名</Label>
+                <TextInput value={team} onChange={setTeam} />
+              </div>
+            </div>
+          </div>
+
+          {/* 点数 */}
+          <div>
+            <SectionTitle>点数</SectionTitle>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <Label>現在の点数（例: 38,200）</Label>
+                <TextInput value={score} onChange={setScore} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <Label>増減（例: +12,000 / −8,000）</Label>
+                <TextInput value={delta} onChange={setDelta} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <Label>増減方向</Label>
+                <Toggle
+                  value={dir}
+                  onChange={setDir}
+                  options={[{ value: "up", label: "▲ 増" }, { value: "down", label: "▼ 減" }, { value: "zero", label: "— 同" }]}
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <Label>点数の色</Label>
+                <Toggle
+                  value={colMode}
+                  onChange={setColMode}
+                  options={[{ value: "auto", label: "自動" }, { value: "hi", label: "金" }, { value: "mi", label: "白" }, { value: "lo", label: "赤" }]}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ストライプカラー */}
+          <div>
+            <SectionTitle>ストライプカラー</SectionTitle>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <input type="color" value={stripeColor} onChange={e => handleColorPicker(e.target.value)}
+                style={{ width: "34px", height: "34px", border: "1px solid rgba(255,255,255,0.12)", background: "none", cursor: "pointer", padding: "2px" }} />
+              <input type="text" value={hexInput} onChange={e => handleHexInput(e.target.value)} maxLength={7}
+                style={{
+                  flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)",
+                  color: "#fff", fontSize: "0.8rem", padding: "7px 9px", outline: "none", fontFamily: "monospace",
+                }} />
+            </div>
+            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+              {PRESETS.map(c => (
+                <div key={c} onClick={() => { handleColorPicker(c); }}
+                  style={{
+                    width: "22px", height: "22px", background: c, cursor: "pointer",
+                    border: stripeColor === c ? "2px solid #fff" : "1px solid rgba(255,255,255,0.1)",
+                  }} />
+              ))}
+            </div>
+          </div>
+
+          {/* プレビュー背景 */}
+          <div>
+            <SectionTitle>プレビュー背景</SectionTitle>
+            <Toggle
+              value={bgMode}
+              onChange={setBgMode}
+              options={[{ value: "dark", label: "暗" }, { value: "light", label: "明" }, { value: "green", label: "緑幕" }]}
+            />
+            <div style={{ fontSize: "0.55rem", color: "#2a2a36", marginTop: "7px", letterSpacing: "1px" }}>
+              ※ PNG出力は背景透過
+            </div>
+          </div>
+        </aside>
+
+        {/* プレビューエリア */}
+        <main style={{
+          flex: 1, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: "18px",
+          padding: "36px 20px", overflow: "auto", transition: "background 0.3s",
+          ...bgStyle,
+        }}>
+          <div style={{ fontSize: "0.55rem", letterSpacing: "3px", color: bgMode === "dark" ? "#252530" : "rgba(0,0,0,0.25)", textTransform: "uppercase" }}>
+            プレビュー
+          </div>
+
+          {/* テロップ本体 */}
+          <div ref={telopRef} style={{ display: "inline-block" }}>
+            <div style={{
+              display: "flex", alignItems: "stretch", overflow: "hidden",
+              background: "rgba(8,9,16,0.95)",
+              border: "1px solid rgba(255,255,255,0.06)", borderLeft: "none",
+              minWidth: "340px",
+            }}>
+              {/* ストライプ */}
+              <div style={{ width: "4px", background: stripeColor, flexShrink: 0 }} />
+              {/* 内容 */}
+              <div style={{ flex: 1, display: "flex", alignItems: "center", padding: "13px 16px 13px 13px" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3px" }}>
+                  <div style={{ fontSize: "1rem", fontWeight: 700, letterSpacing: "2px", lineHeight: 1.2 }}>{name || "選手名"}</div>
+                  <div style={{ fontSize: "0.58rem", letterSpacing: "1px", color: "rgba(255,255,255,0.3)" }}>{team || "チーム名"}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px", paddingLeft: "16px", flexShrink: 0 }}>
+                  <div style={{
+                    fontFamily: "'Rajdhani', sans-serif", fontSize: "0.73rem",
+                    fontWeight: 600, letterSpacing: "1px", color: deltaColor,
+                  }}>
+                    {arrow} {delta || "0"}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
+                    <div style={{
+                      fontFamily: "'Bebas Neue', cursive", fontSize: "1.9rem",
+                      lineHeight: 1, letterSpacing: "1px", color: ptsColor(),
+                    }}>
+                      {score || "0"}
+                    </div>
+                    <div style={{
+                      fontFamily: "'Rajdhani', sans-serif", fontSize: "0.68rem",
+                      letterSpacing: "2px", color: "rgba(255,255,255,0.28)", paddingBottom: "1px",
+                    }}>点</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: "0.6rem", letterSpacing: "2px",
+            color: status.includes("✓") ? "#5ec45e" : status ? "#c9a84c" : "transparent",
+            minHeight: "16px", transition: "color 0.2s",
+          }}>
+            {status || "　"}
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
