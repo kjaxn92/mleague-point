@@ -112,13 +112,6 @@ main.gb{background:#00b140;}
       <div class="stitle">点数</div>
       <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
         <div class="fg show-full"><em>現在の点数（例: 38,200）</em><input type="text" id="pts" value="38,200" oninput="r()"></div>
-        <div class="fg"><em>増減（例: +12,000 / −8,000）</em><input type="text" id="dlt" value="+12,000" oninput="r()"></div>
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <em style="font-size:.61rem;color:var(--dim);letter-spacing:1px;">増減方向</em>
-          <div class="tog">
-            <button id="bu" class="on" onclick="sd('up')">▲ 増</button>
-            <button id="bd" onclick="sd('down')">▼ 減</button>
-            <button id="bz" onclick="sd('zero')">— 同</button>
           </div>
         </div>
         <div class="show-full" style="display:flex;flex-direction:column;gap:4px;">
